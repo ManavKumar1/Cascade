@@ -1,0 +1,44 @@
+{
+  "name": "cascade",
+  "productName": "Cascade",
+  "version": "0.2.0",
+  "description": "A fast, native-feeling download manager for macOS with segmented, resumable downloads.",
+  "main": "build/main/index.js",
+  "private": true,
+  "scripts": {
+    "build:engine": "tsc -p tsconfig.json",
+    "copy-assets": "mkdir -p build/renderer && cp src/renderer/*.html src/renderer/*.css build/renderer/",
+    "build": "tsc -p tsconfig.json && npm run copy-assets",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "npm run build && electron .",
+    "dist:mac": "npm run build && electron-builder --mac"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  },
+  "build": {
+    "appId": "dev.cascade.app",
+    "productName": "Cascade",
+    "files": [
+      "build/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "extension",
+        "to": "extension"
+      }
+    ]
+  }
+}

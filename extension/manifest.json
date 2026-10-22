@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Cascade Download Catcher",
+  "version": "0.2.0",
+  "description": "Sends downloads that start in Chrome to the Cascade desktop app, so they're fast, resumable and queued.",
+  "minimum_chrome_version": "110",
+  "permissions": ["downloads", "storage", "cookies", "contextMenus"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Cascade", "default_popup": "popup.html" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" }
+}

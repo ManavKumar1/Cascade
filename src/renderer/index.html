@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cascade">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>Cascade</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <button id="addBtn" class="btn btn-primary">
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      Add Download
+    </button>
+    <div class="toolbar-spacer"></div>
+    <button id="resumeAllBtn" class="btn btn-ghost">Resume All</button>
+    <button id="pauseAllBtn" class="btn btn-ghost">Pause All</button>
+    <button id="settingsBtn" class="btn-icon" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.6v1.7M8 12.7v1.7M14.4 8h-1.7M3.3 8H1.6M12.5 3.5l-1.2 1.2M4.7 11.3l-1.2 1.2M12.5 12.5l-1.2-1.2M4.7 4.7 3.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+
+  <main id="list" class="download-list"></main>
+
+  <div id="emptyState" class="empty-state">
+    <svg viewBox="0 0 48 48" width="40" height="40" fill="none"><path d="M24 6v24m0 0 9-9m-9 9-9-9M9 34v4a4 4 0 0 0 4 4h22a4 4 0 0 0 4-4v-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <p>No downloads yet</p>
+    <p class="muted">Add a URL, or install the browser extension to catch downloads automatically.</p>
+  </div>
+
+  <div id="addOverlay" class="overlay" hidden>
+    <div class="sheet">
+      <h2>Add download</h2>
+      <label class="field">
+        <span>URL</span>
+        <input id="urlInput" type="text" placeholder="https://example.com/file.zip" autocomplete="off" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span>Save to <em class="hint-inline">(remembered for next time)</em></span>
+        <div class="destination-row">
+          <input id="destInput" type="text" readonly />
+          <button id="chooseDestBtn" class="btn btn-ghost">Choose…</button>
+        </div>
+      </label>
+      <p id="addError" class="field-error" hidden></p>
+      <div class="sheet-actions">
+        <button id="cancelAddBtn" class="btn btn-ghost">Cancel</button>
+        <button id="confirmAddBtn" class="btn btn-primary">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsOverlay" class="overlay" hidden>
+    <div class="sheet sheet-wide">
+      <div class="sheet-header">
+        <h2>Settings</h2>
+        <button id="closeSettingsBtn" class="btn btn-ghost">Done</button>
+      </div>
+      <div class="sheet-body">
+        <section>
+          <h3>Appearance</h3>
+          <div class="seg" id="modeSeg" role="radiogroup" aria-label="Appearance mode">
+            <button data-mode="system" role="radio">System</button>
+            <button data-mode="light" role="radio">Light</button>
+            <button data-mode="dark" role="radio">Dark</button>
+          </div>
+          <div class="swatches" id="themeSwatches" role="radiogroup" aria-label="Color theme"></div>
+        </section>
+
+        <section>
+          <h3>Downloads</h3>
+          <div class="setting-row">
+            <div class="setting-text"><div class="setting-title">Download folder</div><div id="dirLabel" class="setting-sub mono"></div></div>
+            <button id="changeDirBtn" class="btn btn-ghost">Change…</button>
+          </div>
+          <div class="setting-row">
+            <div class="setting-text"><div class="setting-title">Connections per download: <span id="connLabel" class="mono"></span></div>
+              <div class="setting-sub">More connections are faster when a server limits each one. Some servers push back on too many.</div></div>
+            <input id="connRange" type="range" min="1" max="32" step="1" />
+          </div>
+          <div class="setting-row">
+            <div class="setting-text"><div class="setting-title">Downloads at once: <span id="concLabel" class="mono"></span></div>
+              <div class="setting-sub">Others wait in the queue.</div></div>
+            <input id="concRange" type="range" min="1" max="10" step="1" />
+          </div>
+        </section>
+
+        <section>
+          <h3>Browser integration</h3>
+          <div class="setting-row">
+            <div class="setting-text"><div class="setting-title">Accept downloads from the browser extension</div>
+              <div id="bridgeStatus" class="setting-sub"></div></div>
+            <input id="bridgeToggle" type="checkbox" />
+          </div>
+          <div id="bridgeDetails">
+            <div class="setting-row stack">
+              <div class="setting-title">Pairing token</div>
+              <div class="destination-row">
+                <input id="tokenInput" type="text" readonly spellcheck="false" />
+                <button id="copyTokenBtn" class="btn btn-ghost">Copy</button>
+                <button id="newTokenBtn" class="btn btn-ghost">New</button>
+              </div>
+            </div>
+            <ol class="steps">
+              <li>In Chrome open <span class="mono">chrome://extensions</span> and turn on <b>Developer mode</b>.</li>
+              <li>Click <b>Load unpacked</b> and choose the extension folder.</li>
+              <li>Paste the token above into the extension's settings page.</li>
+            </ol>
+            <button id="revealExtBtn" class="btn btn-ghost">Show extension folder</button>
+          </div>
+        </section>
+        <section>
+          <h3>Storage</h3>
+          <div class="setting-row">
+            <div class="setting-text"><div class="setting-title">App data</div><div id="dataPathLabel" class="setting-sub mono"></div>
+              <div class="setting-sub">Your queue, settings and log. Unfinished downloads are kept as <span class="mono">.part</span> files beside their destination, with resume data next to them.</div></div>
+            <button id="revealDataBtn" class="btn btn-ghost">Show</button>
+          </div>
+        </section>
+        <p class="about" id="aboutLine"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

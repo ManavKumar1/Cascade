@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Cascade Download Catcher</title>
+<style>
+  body { font: 14px -apple-system, system-ui, sans-serif; max-width: 520px; margin: 32px auto; padding: 0 16px; color: #1d1d1f; }
+  h1 { font-size: 18px; } label { display: block; margin: 14px 0 4px; font-weight: 600; }
+  input[type=text], input[type=number] { width: 100%; box-sizing: border-box; padding: 7px 9px; font: inherit; border: 1px solid #c7c7cc; border-radius: 7px; }
+  .row { display: flex; gap: 8px; margin-top: 16px; align-items: center; } button { padding: 7px 14px; font: inherit; border-radius: 7px; border: 1px solid #c7c7cc; background: #fff; cursor: pointer; }
+  button.primary { background: #4c6fff; color: #fff; border-color: #4c6fff; } .hint { color: #6e6e73; font-size: 12px; margin-top: 4px; } #status { margin-top: 12px; font-weight: 600; }
+  .ok { color: #1f8a3b; } .bad { color: #c8362d; }
+</style></head><body>
+<h1>Cascade Download Catcher</h1>
+<p class="hint">Open Cascade → Settings → Browser integration, copy the token, and paste it below. Both stay on this computer.</p>
+<label><input type="checkbox" id="enabled"> Send Chrome downloads to Cascade</label>
+<label for="token">Pairing token</label><input type="text" id="token" autocomplete="off" spellcheck="false">
+<label for="port">App port</label><input type="number" id="port" min="1024" max="65535">
+<label for="minSizeMB">Ignore downloads smaller than (MB, 0 = capture everything)</label><input type="number" id="minSizeMB" min="0">
+<label for="excludedDomains">Never capture from these sites (comma separated)</label><input type="text" id="excludedDomains" placeholder="example.com, intranet.local">
+<div class="row"><button class="primary" id="save">Save</button><button id="test">Test connection</button></div>
+<div id="status"></div>
+<script src="core.js"></script><script src="options.js"></script>
+</body></html>
