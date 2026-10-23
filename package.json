@@ -1,9 +1,10 @@
 {
   "name": "cascade",
   "productName": "Cascade",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A fast, native-feeling download manager for macOS with segmented, resumable downloads.",
   "main": "build/main/index.js",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "scripts": {
     "build:engine": "tsc -p tsconfig.json",

@@ -105,3 +105,19 @@ tests/         Engine, settings, bridge-security and extension-flow tests agains
 - Unsigned builds trigger a Gatekeeper warning; signing/notarization needs an Apple Developer ID.
 - Downloads don't get the macOS quarantine flag yet, so Gatekeeper won't check downloaded apps like it does for browser downloads.
 - No app icon for the desktop app yet (the extension has one).
+
+## Contributing
+
+Bug reports, feature requests and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) to get set up. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before participating. Found a security issue? See [SECURITY.md](SECURITY.md) rather than opening a public issue. Released changes are tracked in [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+Cascade is licensed under the **PolyForm Noncommercial License 1.0.0**.
+
+You are welcome to use, study, modify, share, and contribute to Cascade for noncommercial purposes.
+
+Commercial use, including selling Cascade or modified versions, requires separate permission from the copyright holder.
+
+See the [LICENSE](LICENSE) file for the complete terms.
+
+Copyright © 2026 Cascade contributors. All rights reserved except as expressly licensed.

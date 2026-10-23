@@ -60,6 +60,11 @@ body {
 }
 
 .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+.icon { width: 14px; height: 14px; flex-shrink: 0; display: block; }
+.icon-empty-state { width: 40px; height: 40px; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
 
 /* ---- Toolbar ---- */
 .toolbar {
@@ -90,10 +95,12 @@ body {
   cursor: default;
   color: var(--text);
   background: transparent;
+  transition: background-color 0.12s ease, filter 0.12s ease, transform 0.1s ease;
 }
 .btn-primary { background: var(--accent); color: var(--accent-text); }
 .btn-primary:hover { filter: brightness(1.08); }
 .btn-ghost:hover { background: var(--surface-hover); }
+.btn:active { transform: scale(0.96); }
 
 .btn-icon {
   -webkit-app-region: no-drag;
@@ -107,29 +114,69 @@ body {
   align-items: center;
   justify-content: center;
   cursor: default;
+  transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease, transform 0.1s ease;
 }
 .btn-icon:hover { background: var(--surface-hover); color: var(--text); }
 .btn-icon.danger:hover { color: var(--danger); }
+.btn-icon:active { transform: scale(0.88); }
 
 /* ---- List ---- */
 .download-list { flex: 1; overflow-y: auto; padding: 4px 0; }
-.row { display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--border); }
+.row {
+  display: flex; align-items: center; gap: 11px; padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.15s ease;
+}
+.row:hover { background: var(--surface-hover); }
+@media (prefers-reduced-motion: no-preference) {
+  .row-enter { animation: row-enter 0.32s cubic-bezier(.2,.8,.3,1) both; }
+}
+@keyframes row-enter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+.row-type {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--track); color: var(--text-secondary);
+}
+.row-type .icon { width: 13px; height: 13px; }
+
 .row-main { flex: 1; min-width: 0; }
 .row-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
 .row-name { font-weight: 590; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-url { color: var(--text-secondary); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 10; }
 
-.progress-track { height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; margin-bottom: 5px; }
-.progress-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.25s ease; }
+/* The fill's seam count mirrors the download's actual live connection count (--channels, set inline
+   per row) — real engine state, not a decorative pattern. A soft highlight sweeps the filled edge only
+   while actively downloading, suggesting current rather than a static bar. */
+.progress-track { position: relative; height: 5px; border-radius: 2.5px; background: var(--track); overflow: hidden; margin-bottom: 5px; }
+.progress-fill { position: relative; height: 100%; border-radius: 2.5px; background: var(--accent); transition: width 0.45s cubic-bezier(.22,.8,.3,1); overflow: hidden; }
+.progress-fill::before {
+  content: ""; position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.4) 0 1px, transparent 1px calc(100% / var(--channels, 1)));
+  opacity: 0.7;
+}
 .progress-fill.indeterminate { width: 30% !important; animation: indeterminate 1.3s ease-in-out infinite; }
 .progress-fill.success { background: var(--success); }
 .progress-fill.danger { background: var(--danger); }
 @keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(333%); } }
+@media (prefers-reduced-motion: no-preference) {
+  .progress-fill.active::after {
+    content: ""; position: absolute; inset: 0; width: 46%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+    animation: flow 1.7s linear infinite;
+  }
+}
+@keyframes flow { from { transform: translateX(-120%); } to { transform: translateX(240%); } }
 
-.row-status { display: flex; gap: 10px; font-size: 11px; color: var(--text-secondary); }
+.row-status { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-secondary); }
+.row-status-main { display: inline-flex; align-items: center; gap: 5px; }
+.row-status-main .icon { width: 11px; height: 11px; color: var(--success-text); }
 .row-status .danger-text { color: var(--danger); }
-.row-actions { display: flex; gap: 2px; opacity: 0; }
-.row:hover .row-actions { opacity: 1; }
+
+.row-actions { display: flex; gap: 1px; flex-shrink: 0; }
+.row-action { opacity: 0.55; }
+.row:hover .row-action, .row-action:focus-visible { opacity: 1; }
+.row-action:active { transform: scale(0.88); }
 
 /* ---- Empty state ---- */
 .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text-secondary); text-align: center; padding: 0 40px; }

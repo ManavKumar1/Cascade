@@ -144,7 +144,54 @@ export class DownloadTask {
 
   /** Begins (or continues, if resumable state exists) the download. */
   async start(): Promise<void> {
-    if (this.status === "downloading" || this.status === "connecting") return;
+    const { run } = await this.withOpLock(async () => ({ run: this.kickOffRun() }));
+    await run?.catch(() => {});
+  }
+
+  async pause(): Promise<void> {
+    await this.withOpLock(() => this.settlePause());
+  }
+
+  /** Resumes from saved segment state; also usable to retry a failed download. */
+  async resume(): Promise<void> {
+    const { run } = await this.withOpLock(async () => {
+      if (this.status !== "paused" && this.status !== "failed") return { run: null };
+      return { run: this.kickOffRun() };
+    });
+    await run?.catch(() => {});
+  }
+
+  /** Cancels an unfinished download and deletes its partial data. A completed download's file is never touched. */
+  async cancel(): Promise<void> {
+    await this.withOpLock(() => this.settleCancel());
+  }
+
+  // A lock so start/pause/resume/cancel can never overlap. Without it, calling resume() before an
+  // in-flight pause() has finished unwinding (flushed buffers, closed file handle) races two runs
+  // against the same file handle: whichever's `finally` closes it last leaves the other writing to a
+  // closed fd, which fails the download outright and can force it back to square one. When nothing is
+  // in flight, a call runs immediately (synchronously, same as before this lock existed) — callers that
+  // fire-and-forget start() rely on the status changing to "connecting" before their next line runs.
+  // Only when a pause()/cancel() is actively unwinding does a later call wait its turn; start/resume
+  // release the lock again as soon as the new run has been kicked off, not for the run's whole duration,
+  // so a later pause() isn't stuck waiting for the entire download.
+  private opLocked = false;
+  private opWaiters: Array<() => void> = [];
+  private async withOpLock<T>(critical: () => Promise<T>): Promise<T> {
+    if (this.opLocked) await new Promise<void>((resolve) => this.opWaiters.push(resolve));
+    this.opLocked = true;
+    try {
+      return await critical();
+    } finally {
+      this.opLocked = false;
+      this.opWaiters.shift()?.();
+    }
+  }
+
+  /** Synchronous: creates a fresh controller and kicks off runStart() without waiting for it to finish,
+   *  so the caller (inside withOpLock) can release the queue immediately rather than for the whole download. */
+  private kickOffRun(): Promise<void> | null {
+    if (this.status === "downloading" || this.status === "connecting") return this.activeRun;
     const run = this.runStart();
     this.activeRun = run;
     run.finally(() => {
@@ -153,22 +200,15 @@ export class DownloadTask {
     return run;
   }
 
-  async pause(): Promise<void> {
+  private async settlePause(): Promise<void> {
     if (this.status !== "downloading" && this.status !== "connecting") return;
     this.setStatus("paused");
     this.controller?.abort();
-    // Wait for the run to unwind (buffers flushed, file synced and closed) so an immediate resume() can't overlap.
+    // Wait for the run to unwind (buffers flushed, file synced and closed) before this call returns.
     await this.activeRun?.catch(() => {});
   }
 
-  /** Resumes from saved segment state; also usable to retry a failed download. */
-  async resume(): Promise<void> {
-    if (this.status !== "paused" && this.status !== "failed") return;
-    return this.start();
-  }
-
-  /** Cancels an unfinished download and deletes its partial data. A completed download's file is never touched. */
-  async cancel(): Promise<void> {
+  private async settleCancel(): Promise<void> {
     if (this.status === "completed") return;
     const wasActive = this.status === "downloading" || this.status === "connecting";
     this.setStatus("canceled");
@@ -415,6 +455,10 @@ export class DownloadTask {
       }
     }
     if (!victim || victim.end === null || victimRemaining < this.minStealBytes * 2) return null;
+    // An hours-long download (a very large file) can otherwise accumulate thousands of steal-created
+    // segments over its lifetime, which slows every save and bloats queue.json. Past this many, stop
+    // splitting further — the existing segments are still plenty for full-speed parallelism.
+    if (this.segmentStates.length >= Math.max(64, this.maxConnections * 8)) return null;
 
     const splitAt = victim.start + victim.received + (victim.buffered ?? 0) + Math.floor(victimRemaining / 2);
     const nextIndex = this.segmentStates.reduce((m, s) => Math.max(m, s.index), -1) + 1;

@@ -145,12 +145,27 @@ const tokenInput = $("tokenInput") as HTMLInputElement;
 
 let chosenDestDir: string | null = null;
 
-const icons = {
-  play: '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M4 2.8c0-.7.8-1.1 1.4-.7l8 5.2c.5.3.5 1.1 0 1.4l-8 5.2c-.6.4-1.4 0-1.4-.7V2.8Z"/></svg>',
-  pause: '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><rect x="3.5" y="2.5" width="3.2" height="11" rx="1"/><rect x="9.3" y="2.5" width="3.2" height="11" rx="1"/></svg>',
-  remove: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none"><path d="M3 4.5h10M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5M4.5 4.5 5 13a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  folder: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none"><path d="M2 4.2A1.2 1.2 0 0 1 3.2 3h3l1.3 1.6h5.3A1.2 1.2 0 0 1 14 5.8v6A1.2 1.2 0 0 1 12.8 13H3.2A1.2 1.2 0 0 1 2 11.8V4.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
-};
+// Every icon is a <use> reference into the sprite defined once in index.html — add a symbol there
+// to add an icon here, rather than inlining SVG path data at each call site.
+function useIcon(id: string): string {
+  return `<svg class="icon" viewBox="0 0 16 16"><use href="#icon-${id}"/></svg>`;
+}
+
+// A quick visual sort cue down a long list: what kind of thing is this, at a glance, before the name
+// is even read. Falls back to a plain-file glyph for anything not recognized.
+const FILE_TYPE_ICON: Record<string, string> = Object.fromEntries(
+  [
+    ["image", "jpg jpeg png gif webp avif heic heif bmp svg ico tiff tif jxl"],
+    ["video", "mp4 mov mkv avi webm m4v wmv flv mpg mpeg ogv 3gp ts"],
+    ["audio", "mp3 m4a wav flac aac ogg opus weba mid"],
+    ["archive", "zip rar 7z tar gz bz2 xz zst dmg iso jar apk deb rpm"],
+    ["doc", "pdf doc docx txt md rtf pages odt xls xlsx ppt pptx csv"],
+  ].flatMap(([kind, exts]) => exts.split(" ").map((e) => [e, kind]))
+);
+function fileTypeIconId(path: string): string {
+  const m = /\.([a-z0-9]+)$/i.exec(path);
+  return "file-" + ((m && FILE_TYPE_ICON[m[1].toLowerCase()]) || "generic");
+}
 
 // ---- Download list ----
 function statusLabel(d: UIDownload): string {
@@ -174,12 +189,14 @@ function statusLabel(d: UIDownload): string {
   }
 }
 
-function iconButton(svg: string, title: string, onClick: () => void): HTMLButtonElement {
+function iconButton(iconId: string, title: string, onClick: () => void, variant?: "danger"): HTMLButtonElement {
   const btn = document.createElement("button");
-  btn.className = "btn-icon";
+  btn.className = "btn-icon row-action" + (variant ? ` ${variant}` : "");
   btn.title = title;
   btn.setAttribute("aria-label", title);
-  btn.innerHTML = svg;
+  btn.innerHTML = useIcon(iconId);
+  // Row actions live inside a row that itself has no click behavior, so no stopPropagation is needed —
+  // kept as separate listeners (not row-level delegation) so each button's purpose stays self-contained.
   btn.addEventListener("click", onClick);
   return btn;
 }
@@ -187,6 +204,12 @@ function iconButton(svg: string, title: string, onClick: () => void): HTMLButton
 function renderRow(d: UIDownload): HTMLElement {
   const row = document.createElement("div");
   row.className = "row";
+  row.dataset.id = d.id;
+
+  const typeIcon = document.createElement("div");
+  typeIcon.className = "row-type";
+  typeIcon.innerHTML = useIcon(fileTypeIconId(d.destinationPath));
+
   const main = document.createElement("div");
   main.className = "row-main";
 
@@ -202,10 +225,14 @@ function renderRow(d: UIDownload): HTMLElement {
 
   const track = document.createElement("div");
   track.className = "progress-track";
+  // How many live connections this download is using becomes the number of visible flow channels —
+  // real engine state rendered directly, not a decorative texture.
+  track.style.setProperty("--channels", String(Math.min(8, Math.max(1, d.progress.connections || 1))));
   const fill = document.createElement("div");
   fill.className = "progress-fill";
   if (d.status === "failed") fill.classList.add("danger");
   if (d.status === "completed") fill.classList.add("success");
+  if (d.status === "downloading") fill.classList.add("active");
   if (d.progress.percent === null && (d.status === "downloading" || d.status === "connecting")) {
     fill.classList.add("indeterminate");
   } else {
@@ -216,8 +243,10 @@ function renderRow(d: UIDownload): HTMLElement {
   const status = document.createElement("div");
   status.className = "row-status";
   const statusText = document.createElement("span");
+  statusText.className = "row-status-main";
   if (d.status === "failed") statusText.classList.add("danger-text");
-  statusText.textContent = statusLabel(d);
+  if (d.status === "completed") statusText.innerHTML = useIcon("check") + "<span>Completed</span>";
+  else statusText.textContent = statusLabel(d);
   status.append(statusText);
   if (d.status === "downloading" || d.status === "paused") {
     const size = document.createElement("span");
@@ -245,27 +274,64 @@ function renderRow(d: UIDownload): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "row-actions";
   if (d.status === "downloading" || d.status === "connecting") {
-    actions.append(iconButton(icons.pause, "Pause", () => void cascade.pause(d.id)));
-  } else if (d.status === "paused" || d.status === "failed") {
-    actions.append(iconButton(icons.play, "Resume", () => void cascade.resume(d.id)));
+    actions.append(iconButton("pause", "Pause", () => void cascade.pause(d.id)));
+  } else if (d.status === "failed") {
+    actions.append(iconButton("retry", "Retry now", () => void cascade.resume(d.id)));
+  } else if (d.status === "paused") {
+    actions.append(iconButton("play", "Resume", () => void cascade.resume(d.id)));
   } else if (d.status === "completed") {
-    actions.append(iconButton(icons.folder, "Show in Finder", () => void cascade.revealInFinder(d.id)));
+    actions.append(iconButton("folder", "Show in Finder", () => void cascade.revealInFinder(d.id)));
   }
-  const removeBtn = iconButton(
-    icons.remove,
-    d.status === "completed" ? "Remove from list (keeps the file)" : "Cancel and delete partial file",
-    () => void cascade.remove(d.id)
+  actions.append(iconButton("link", "Copy download link", () => void cascade.copyText(d.url)));
+  actions.append(
+    iconButton(
+      "cancel",
+      d.status === "completed" ? "Remove from list (keeps the file)" : "Cancel and delete partial file",
+      () => void cascade.remove(d.id),
+      "danger"
+    )
   );
-  removeBtn.classList.add("danger");
-  actions.append(removeBtn);
 
-  row.append(main, actions);
+  row.append(typeIcon, main, actions);
   return row;
 }
 
+// Rows are rebuilt from scratch on every update (simplest correct approach, and this list is short),
+// which would otherwise make every change look like a hard cut. A plain FLIP pass restores continuity:
+// measure where surviving rows were, replace the DOM, then animate each from its old position to its
+// new one. New rows get a small entrance instead of popping in. Skipped under reduced-motion.
+const seenRowIds = new Set<string>();
 function render(downloads: UIDownload[]): void {
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const before = reduceMotion
+    ? null
+    : new Map((Array.from(listEl.children) as HTMLElement[]).map((el) => [el.dataset.id!, el.getBoundingClientRect()]));
+
   listEl.replaceChildren(...downloads.map(renderRow));
   emptyStateEl.hidden = downloads.length > 0;
+
+  for (const el of Array.from(listEl.children) as HTMLElement[]) {
+    const id = el.dataset.id!;
+    const prevRect = before?.get(id);
+    if (!reduceMotion && prevRect) {
+      const newRect = el.getBoundingClientRect();
+      const dy = prevRect.top - newRect.top;
+      if (Math.abs(dy) > 1) {
+        el.style.transition = "none";
+        el.style.transform = `translateY(${dy}px)`;
+        requestAnimationFrame(() => {
+          el.style.transition = "transform 0.28s cubic-bezier(.2,.7,.3,1)";
+          el.style.transform = "";
+        });
+      }
+    } else if (!reduceMotion && !seenRowIds.has(id)) {
+      el.classList.add("row-enter");
+    }
+    seenRowIds.add(id);
+  }
+  for (const id of Array.from(seenRowIds)) {
+    if (!downloads.some((d) => d.id === id)) seenRowIds.delete(id);
+  }
 }
 
 // ---- Add sheet ----
