@@ -389,6 +389,96 @@ describe("DownloadManager", () => {
     expect(manager.list().length).toBe(0);
     expect((await fs.readFile(path.join(dir, "keep.bin"))).equals(content)).toBe(true);
   });
+
+  it("dismissing a COMPLETED download keeps the file on disk (same as remove)", async () => {
+    const content = makeContent(32 * 1024, 42);
+    const server = new TestServer({ content });
+    await server.start();
+    const dir = await tmpDir();
+
+    const manager = new DownloadManager();
+    const task = manager.add({ url: server.url, destinationPath: path.join(dir, "keep2.bin") });
+    await waitFor(task, "completed");
+    await manager.dismiss(task.id);
+    await server.stop();
+
+    expect(manager.list().length).toBe(0);
+    expect((await fs.readFile(path.join(dir, "keep2.bin"))).equals(content)).toBe(true);
+  });
+
+  it("dismissing a PAUSED download keeps the partial file on disk", async () => {
+    const server = new TestServer({ content: makeContent(4 * 1024 * 1024, 43), chunkDelayMs: 20 });
+    await server.start();
+    const dir = await tmpDir();
+
+    const manager = new DownloadManager();
+    const task = manager.add({ url: server.url, destinationPath: path.join(dir, "partial.bin") });
+    await waitFor(task, "downloading");
+    await task.pause();
+    const partPath = task.destinationPath + ".part";
+    expect(await fs.stat(partPath).then(() => true, () => false)).toBe(true);
+
+    await manager.dismiss(task.id);
+    await server.stop();
+
+    expect(manager.list().length).toBe(0);
+    expect(await fs.stat(partPath).then(() => true, () => false)).toBe(true);
+  });
+
+  it("erasing a COMPLETED download DELETES the file — the gap remove()/dismiss() deliberately don't cover", async () => {
+    const content = makeContent(32 * 1024, 44);
+    const server = new TestServer({ content });
+    await server.start();
+    const dir = await tmpDir();
+
+    const manager = new DownloadManager();
+    const task = manager.add({ url: server.url, destinationPath: path.join(dir, "erase-me.bin") });
+    await waitFor(task, "completed");
+    const finalPath = task.destinationPath;
+    expect(await fs.stat(finalPath).then(() => true, () => false)).toBe(true);
+
+    await manager.erase(task.id);
+    await server.stop();
+
+    expect(manager.list().length).toBe(0);
+    expect(await fs.stat(finalPath).then(() => true, () => false)).toBe(false);
+  });
+
+  it("erasing a PAUSED download deletes the partial file", async () => {
+    const server = new TestServer({ content: makeContent(4 * 1024 * 1024, 45), chunkDelayMs: 20 });
+    await server.start();
+    const dir = await tmpDir();
+
+    const manager = new DownloadManager();
+    const task = manager.add({ url: server.url, destinationPath: path.join(dir, "erase-partial.bin") });
+    await waitFor(task, "downloading");
+    await task.pause();
+    const partPath = task.destinationPath + ".part";
+    expect(await fs.stat(partPath).then(() => true, () => false)).toBe(true);
+
+    await manager.erase(task.id);
+    await server.stop();
+
+    expect(manager.list().length).toBe(0);
+    expect(await fs.stat(partPath).then(() => true, () => false)).toBe(false);
+  });
+
+  it("erasing an ACTIVELY DOWNLOADING download stops it and deletes the partial file", async () => {
+    const server = new TestServer({ content: makeContent(4 * 1024 * 1024, 46), chunkDelayMs: 20 });
+    await server.start();
+    const dir = await tmpDir();
+
+    const manager = new DownloadManager();
+    const task = manager.add({ url: server.url, destinationPath: path.join(dir, "erase-active.bin") });
+    await waitFor(task, "downloading");
+    const partPath = task.destinationPath + ".part";
+
+    await manager.erase(task.id);
+    await server.stop();
+
+    expect(manager.list().length).toBe(0);
+    expect(await fs.stat(partPath).then(() => true, () => false)).toBe(false);
+  });
 });
 
 describe("helpers", () => {

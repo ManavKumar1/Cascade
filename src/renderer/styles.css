@@ -60,6 +60,11 @@ body {
 }
 
 .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+.icon { width: 16px; height: 16px; flex-shrink: 0; display: block; }
+.icon-empty-state { width: 40px; height: 40px; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
 
 /* ---- Toolbar ---- */
 .toolbar {
@@ -90,10 +95,12 @@ body {
   cursor: default;
   color: var(--text);
   background: transparent;
+  transition: background-color 0.12s ease, filter 0.12s ease, transform 0.1s ease;
 }
 .btn-primary { background: var(--accent); color: var(--accent-text); }
 .btn-primary:hover { filter: brightness(1.08); }
 .btn-ghost:hover { background: var(--surface-hover); }
+.btn:active { transform: scale(0.96); }
 
 .btn-icon {
   -webkit-app-region: no-drag;
@@ -107,29 +114,91 @@ body {
   align-items: center;
   justify-content: center;
   cursor: default;
+  transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease, transform 0.1s ease;
 }
 .btn-icon:hover { background: var(--surface-hover); color: var(--text); }
 .btn-icon.danger:hover { color: var(--danger); }
+.btn-icon:active { transform: scale(0.88); }
 
 /* ---- List ---- */
 .download-list { flex: 1; overflow-y: auto; padding: 4px 0; }
-.row { display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--border); }
+.row {
+  display: flex; align-items: center; gap: 11px; padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.15s ease;
+}
+.row:hover { background: var(--surface-hover); }
+@media (prefers-reduced-motion: no-preference) {
+  .row-enter { animation: row-enter 0.32s cubic-bezier(.2,.8,.3,1) both; }
+}
+@keyframes row-enter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+.row-type {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--track); color: var(--text-secondary);
+  overflow: hidden; /* clips the thumbnail image to the rounded corners */
+}
+.row-type .icon { width: 15px; height: 15px; }
+.row-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+
 .row-main { flex: 1; min-width: 0; }
 .row-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
 .row-name { font-weight: 590; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-url { color: var(--text-secondary); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 10; }
 
-.progress-track { height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; margin-bottom: 5px; }
-.progress-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.25s ease; }
+/* The fill's seam count mirrors the download's actual live connection count (--channels, set inline
+   per row) — real engine state, not a decorative pattern. A soft highlight sweeps the filled edge only
+   while actively downloading, suggesting current rather than a static bar. */
+.progress-track { position: relative; height: 5px; border-radius: 2.5px; background: var(--track); overflow: hidden; margin-bottom: 5px; }
+.progress-fill { position: relative; height: 100%; border-radius: 2.5px; background: var(--accent); transition: width 0.45s cubic-bezier(.22,.8,.3,1); overflow: hidden; }
+.progress-fill::before {
+  content: ""; position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.4) 0 1px, transparent 1px calc(100% / var(--channels, 1)));
+  opacity: 0.7;
+}
 .progress-fill.indeterminate { width: 30% !important; animation: indeterminate 1.3s ease-in-out infinite; }
 .progress-fill.success { background: var(--success); }
 .progress-fill.danger { background: var(--danger); }
 @keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(333%); } }
+@media (prefers-reduced-motion: no-preference) {
+  /* A single band sweeping past, once every cycle, reads as a blip, not a flow — most of each loop
+     it was off-screen with nothing visibly moving. Tiled diagonal stripes are visible everywhere at
+     once, and the tile is a square moved diagonally by its own size each cycle, which is what
+     guarantees a seamless loop (the standard technique for an animated striped bar) — no jump, and
+     the stripe spacing is fixed pixels rather than a % of the fill, so it looks the same speed
+     whether the bar is 5% full or 95%. */
+  /* A hard-edged repeating diagonal stripe, animating at constant speed, is the generic "loading bar"
+     pattern — functional, but it reads as stock, and the fast rigid tempo feels mechanical rather
+     than like water moving. This is one soft, wide, feathered band of light (fading in and out at its
+     own edges rather than stepping between hard stripe boundaries) drifting through at an unhurried,
+     eased pace — closer to light playing across a moving surface than a barber pole. */
+  .progress-fill.active::after {
+    content: ""; position: absolute; inset: 0;
+    background-image: linear-gradient(
+      100deg,
+      transparent 0%,
+      rgba(255,255,255,.06) 32%,
+      rgba(255,255,255,.55) 48%,
+      rgba(255,255,255,.55) 52%,
+      rgba(255,255,255,.06) 68%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: flow 2.6s ease-in-out infinite;
+  }
+}
+@keyframes flow { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 
-.row-status { display: flex; gap: 10px; font-size: 11px; color: var(--text-secondary); }
+.row-status { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-secondary); }
+.row-status-main { display: inline-flex; align-items: center; gap: 5px; }
+.row-status-main .icon { width: 11px; height: 11px; color: var(--success-text); }
 .row-status .danger-text { color: var(--danger); }
-.row-actions { display: flex; gap: 2px; opacity: 0; }
-.row:hover .row-actions { opacity: 1; }
+
+.row-actions { display: flex; gap: 1px; flex-shrink: 0; }
+.row-action { opacity: 0.55; }
+.row:hover .row-action, .row-action:focus-visible { opacity: 1; }
+.row-action:active { transform: scale(0.88); }
 
 /* ---- Empty state ---- */
 .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text-secondary); text-align: center; padding: 0 40px; }
@@ -172,6 +241,8 @@ input[type="checkbox"] { width: 17px; height: 17px; flex-shrink: 0; }
 .steps { margin: 6px 0 10px; padding-left: 18px; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
 .steps b { color: var(--text); font-weight: 600; }
 .about { margin: 8px 0 0; font-size: 11px; color: var(--text-secondary); text-align: center; }
+.heart { color: var(--danger); }
+#supportBtn .icon { color: var(--danger); }
 
 .seg { display: inline-flex; background: var(--track); border-radius: 8px; padding: 2px; margin-bottom: 14px; }
 .seg button { -webkit-app-region: no-drag; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--text); background: transparent; border: none; border-radius: 6px; padding: 5px 16px; cursor: default; }
@@ -184,3 +255,45 @@ input[type="checkbox"] { width: 17px; height: 17px; flex-shrink: 0; }
 .swatch:hover { filter: brightness(0.97); }
 
 .tag { font-size: 10.5px; padding: 0 6px; border-radius: 4px; background: var(--track); color: var(--text-secondary); line-height: 16px; align-self: center; }
+
+.link-btn { -webkit-app-region: no-drag; font: inherit; font-size: 11px; color: var(--text-secondary); background: none; border: none; text-decoration: underline; cursor: default; padding: 0; }
+.link-btn:hover { color: var(--text); }
+
+/* ---- Tutorial / first-run coachmarks ---- */
+.tutorial-overlay { position: fixed; inset: 0; z-index: 600; }
+/* The spotlight's own 9999px shadow is what dims the whole screen, for every step — including a
+   "no target" step, where reposition() just shrinks it to a dot at the center and this class drops
+   the ring, rather than hiding the element (which would leave nothing dimming the screen at all). */
+.tutorial-spotlight {
+  position: fixed; border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(10, 10, 15, 0.62);
+  outline: 2px solid var(--accent);
+  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease, outline-color 0.2s ease;
+  pointer-events: none;
+}
+.tutorial-spotlight.no-target { outline-color: transparent; }
+.tutorial-card {
+  position: fixed; z-index: 2; width: 300px; max-width: calc(100vw - 28px);
+  background: var(--surface); border-radius: 14px; padding: 18px 18px 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  transition: top 0.25s ease, left 0.25s ease;
+}
+.tutorial-title { margin: 0 0 6px; font-size: 14.5px; font-weight: 600; color: var(--text); }
+.tutorial-body { margin: 0 0 14px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+.tutorial-dots { display: flex; gap: 5px; margin-bottom: 14px; }
+.tutorial-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--track); }
+.tutorial-dot.on { background: var(--accent); }
+.tutorial-actions { display: flex; align-items: center; justify-content: space-between; }
+.tutorial-actions-right { display: flex; gap: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-spotlight, .tutorial-card { transition: none; }
+}
+
+.update-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 10px 0 0; padding: 9px 12px; border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  font-size: 12px; color: var(--text);
+}
+.btn-sm { padding: 4px 10px; font-size: 12px; }

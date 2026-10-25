@@ -1,9 +1,10 @@
 {
   "name": "cascade",
   "productName": "Cascade",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "A fast, native-feeling download manager for macOS with segmented, resumable downloads.",
   "main": "build/main/index.js",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "scripts": {
     "build:engine": "tsc -p tsconfig.json",
@@ -12,12 +13,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "npm run build && electron .",
-    "dist:mac": "npm run build && electron-builder --mac"
+    "dist:mac": "npm run build && electron-builder --mac",
+    "release": "npm run build && electron-builder --mac --publish always",
+    "sync:maintainer": "node scripts/sync-maintainer-info.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
+    "qrcode": "^1.5.4",
     "typescript": "^5.9.3",
     "vitest": "^2.1.9"
   },
@@ -28,6 +32,7 @@
       "build/**/*"
     ],
     "mac": {
+      "icon": "Cascade.png",
       "category": "public.app-category.utilities",
       "target": [
         "dmg",
@@ -38,7 +43,15 @@
       {
         "from": "extension",
         "to": "extension"
+      },
+      {
+        "from": "maintainer.config.json",
+        "to": "maintainer.config.json"
       }
-    ]
+    ],
+    "publish": {
+      "provider": "github",
+      "releaseType": "release"
+    }
   }
 }

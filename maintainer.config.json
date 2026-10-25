@@ -1,0 +1,7 @@
+{
+  "_comment": "Single place to edit your own info. The app reads this file directly at runtime for the in-app Support button. README.md and .github/FUNDING.yml can't do that (GitHub renders them as static text, nothing fetches at view-time), so a GitHub Action (.github/workflows/sync-maintainer-info.yml) runs `scripts/sync-maintainer-info.js` and commits the result automatically whenever this file is pushed. Run `npm run sync:maintainer` yourself first if you want to preview the change locally before pushing it.",
+  "githubUsername": "Syncxy",
+  "repoName": "cascade",
+  "upiId": "",
+  "upiPayeeName": "Cascade"
+}

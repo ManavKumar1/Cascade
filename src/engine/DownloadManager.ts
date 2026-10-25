@@ -33,7 +33,10 @@ export interface LoadSummary {
 
 export type Outcome = "started" | "queued" | "failed" | "timeout";
 
-const PROGRESS_SAVE_INTERVAL_MS = 5000;
+// How long a hard crash (power loss, kill -9 — no graceful shutdown hook fires) can leave stranded:
+// bytes already on disk but not yet reflected in queue.json. Kept short because a fast multi-connection
+// download can move tens of MB/s, so even a few seconds of exposure is a meaningful rollback on resume.
+const PROGRESS_SAVE_INTERVAL_MS = 2000;
 const DEFAULT_RETRY_DELAYS = [15_000, 30_000, 60_000, 120_000, 300_000, 600_000, 600_000, 600_000];
 
 export class DownloadManager {
@@ -126,7 +129,8 @@ export class DownloadManager {
   }
 
   /** Removes a download from the list. Unfinished downloads are cancelled and their partial data deleted;
-   *  a completed download's file is always kept. */
+   *  a completed download's file is always kept. For all statuses except actively-downloading, prefer
+   *  dismiss() if you want to remove the entry without touching anything on disk at all. */
   async remove(id: string): Promise<void> {
     const task = this.tasks.get(id);
     if (!task) return;
@@ -135,7 +139,43 @@ export class DownloadManager {
     this.tasks.delete(id);
     this.order = this.order.filter((x) => x !== id);
     this.pendingResume.delete(id);
-    this.scheduleSave();
+    await this.saveNow().catch((e) => this.log(`save after remove failed: ${(e as Error).message}`));
+    this.emitChanged();
+  }
+
+  /** Deletes whatever's actually on disk for this download — the finished file if it completed, the
+   *  partial data otherwise — and removes the entry from the list. The one path in this class that
+   *  will ever delete a *completed* download's file; remove() and dismiss() both deliberately never
+   *  do that (see DownloadTask.erase() for why). */
+  async erase(id: string): Promise<void> {
+    const task = this.tasks.get(id);
+    if (!task) return;
+    this.clearRetry(id);
+    await task.erase();
+    this.tasks.delete(id);
+    this.order = this.order.filter((x) => x !== id);
+    this.pendingResume.delete(id);
+    await this.saveNow().catch((e) => this.log(`save after erase failed: ${(e as Error).message}`));
+    this.emitChanged();
+  }
+
+  /** Removes an entry from the list without touching any file on disk — no deletion of the partial
+   *  file, no deletion of the completed file. Safe for completed, failed, paused, canceled, and
+   *  queued downloads. For an actively-downloading task, falls back to remove() (which cancels and
+   *  deletes the partial), since a download in flight can't safely be "dismissed without cleanup". */
+  async dismiss(id: string): Promise<void> {
+    const task = this.tasks.get(id);
+    if (!task) return;
+    this.clearRetry(id);
+    if (!task.dismiss()) {
+      // Task was active — not safe to leave an in-flight write with no owner. Fall back to the full
+      // cancel path, which stops the transfer cleanly before removing anything.
+      await task.cancel();
+    }
+    this.tasks.delete(id);
+    this.order = this.order.filter((x) => x !== id);
+    this.pendingResume.delete(id);
+    await this.saveNow().catch((e) => this.log(`save after dismiss failed: ${(e as Error).message}`));
     this.emitChanged();
   }
 
@@ -143,6 +183,9 @@ export class DownloadManager {
     this.pendingResume.delete(id);
     this.clearRetry(id);
     await this.tasks.get(id)?.pause();
+    // A deliberate pause is exactly the moment the user might go on to restart their computer: save
+    // it now, fully (not the usual 300ms-debounced save), so it can never be lost to a crash right after.
+    await this.saveNow().catch((e) => this.log(`save after pause failed: ${(e as Error).message}`));
   }
 
   async resume(id: string): Promise<void> {
@@ -162,6 +205,7 @@ export class DownloadManager {
     this.pendingResume.clear();
     for (const id of [...this.retryTimers.keys()]) this.clearRetry(id);
     await Promise.all(this.list().map((t) => t.pause()));
+    await this.saveNow().catch((e) => this.log(`save after pauseAll failed: ${(e as Error).message}`));
   }
 
   resumeAll(): void {
@@ -298,7 +342,14 @@ export class DownloadManager {
     task.events.on("status", (s) => {
       if (s === "completed") this.clearRetry(task.id, true);
       if (s === "failed") this.maybeScheduleRetry(task);
-      this.scheduleSave();
+      // A settled state (not "downloading"/"connecting") is saved right away rather than debounced:
+      // these are the moments a crash would otherwise strand (e.g. "completed" not yet on disk means a
+      // restart would try to redownload into a fresh .part next to the file that's already finished).
+      if (s === "completed" || s === "failed" || s === "paused" || s === "canceled") {
+        this.saveNow().catch((e) => this.log(`save on ${s} failed: ${(e as Error).message}`));
+      } else {
+        this.scheduleSave();
+      }
       this.scheduleNext();
       this.emitChanged();
     });

@@ -15,6 +15,7 @@ export function defaultSettings(): Settings {
     bridgeEnabled: true,
     bridgePort: DEFAULT_BRIDGE_PORT,
     bridgeToken: "",
+    tutorialSeenStepIds: [],
   };
 }
 
@@ -33,6 +34,11 @@ export function sanitizeSettings(input: Partial<Settings>, base: Settings): Sett
   if (typeof input.bridgeEnabled === "boolean") out.bridgeEnabled = input.bridgeEnabled;
   out.bridgePort = clampInt(input.bridgePort, 1024, 65535, base.bridgePort);
   if (typeof input.bridgeToken === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(input.bridgeToken)) out.bridgeToken = input.bridgeToken;
+  if (Array.isArray(input.tutorialSeenStepIds) && input.tutorialSeenStepIds.every((id) => typeof id === "string")) {
+    // De-duplicated and capped — this only ever grows by one small id at a time from the app itself,
+    // so a large or malformed list here is a sign of something else writing to settings.json.
+    out.tutorialSeenStepIds = Array.from(new Set(input.tutorialSeenStepIds)).slice(0, 200);
+  }
   return out;
 }
 

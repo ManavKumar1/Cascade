@@ -27,6 +27,10 @@ export interface Settings {
   bridgeEnabled: boolean;
   bridgePort: number;
   bridgeToken: string;
+  /** Ids of tutorial steps this install has already shown (see src/renderer/tutorial.ts). Lets a
+   *  future update add new steps and have only *those* appear for existing users, instead of either
+   *  replaying the whole tour or silently never mentioning the new feature. */
+  tutorialSeenStepIds: string[];
 }
 
 export interface BridgeStatus {
@@ -44,4 +48,15 @@ export interface AppState {
   /** Where the queue, settings and log live. */
   dataPath: string;
   version: string;
+  /** Read live from the OS each time (see currentState() in main/index.ts), not stored in settings. */
+  launchAtLogin: boolean;
+  /** null = no update check done yet or not a packaged build. */
+  update: UpdateState | null;
 }
+
+export type UpdateState =
+  | { phase: "checking" }
+  | { phase: "current" }                           // already on the latest version
+  | { phase: "available"; version: string }         // found a newer version, downloading it now
+  | { phase: "ready"; version: string }             // downloaded, restart to install
+  | { phase: "error"; message: string };

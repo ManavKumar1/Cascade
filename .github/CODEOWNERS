@@ -1,0 +1,7 @@
+# Every file in this repo requires @Syncxy's review before a pull request can merge.
+# This is what actually stops a PR from quietly swapping the donation info (QR, GitHub
+# Sponsors username, bank/UPI details) — it can't land without the owner explicitly
+# approving that exact diff. Combine with a branch protection rule on `main` that requires
+# this review (see the README's Support section / project owner's own notes) — CODEOWNERS
+# alone only tags the right reviewer, it doesn't block the merge by itself.
+* @Syncxy

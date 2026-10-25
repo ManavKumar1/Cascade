@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, clipboard, powerMonitor } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, clipboard, powerMonitor, Menu, nativeImage, autoUpdater } from "electron";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { DownloadManager } from "../engine/DownloadManager";
@@ -7,7 +7,7 @@ import { SettingsStore } from "./settings";
 import { BrowserBridge } from "./bridge";
 import { makeAdder } from "./adder";
 import { createLogger } from "./log";
-import type { AppState, BridgeStatus, Settings, UIDownload } from "../shared/types";
+import type { AppState, BridgeStatus, Settings, UIDownload, UpdateState } from "../shared/types";
 
 let mainWindow: BrowserWindow | null = null;
 let manager: DownloadManager;
@@ -17,6 +17,47 @@ let bridge: BrowserBridge | null = null;
 let bridgeStatus: BridgeStatus = { running: false, port: 0 };
 let quitting = false;
 let log: (message: string) => void = () => {};
+
+function buildMenu(): void {
+  // Deliberately no "View" menu — that's where Electron's defaults put Reload, Force Reload,
+  // and Toggle Developer Tools. Leaving it off removes all three, menu-wise; devTools:false on
+  // the window is what actually blocks the shortcut too. Edit/Window roles are kept so
+  // Cmd+C/V/X/A/Z keep working in the token and URL fields.
+  const isMac = process.platform === "darwin";
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [{
+          label: app.name,
+          submenu: [
+            { role: "about" as const },
+            { type: "separator" as const },
+            { role: "services" as const },
+            { type: "separator" as const },
+            { role: "hide" as const },
+            { role: "hideOthers" as const },
+            { role: "unhide" as const },
+            { type: "separator" as const },
+            { role: "quit" as const },
+          ],
+        }]
+      : []),
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" }, { role: "redo" }, { type: "separator" },
+        { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" },
+      ],
+    },
+    {
+      label: "Window",
+      submenu: [{ role: "minimize" }, { role: "zoom" }, ...(isMac ? [{ role: "front" as const }] : [{ role: "close" as const }])],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  if (isMac) {
+    app.setAboutPanelOptions({ applicationName: "Cascade", applicationVersion: app.getVersion(), credits: "Made with ❤️ in India" });
+  }
+}
 
 function createWindow(): void {
   const s = settingsStore.get();
@@ -32,6 +73,9 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Off in the packaged app so there's no menu item, no Cmd+Opt+I, no window to open —
+      // this is what actually blocks it, not just hiding the menu entry. Still on for `npm run dev`.
+      devTools: !app.isPackaged,
     },
   });
   // The theme goes in the URL so the first paint already has the right colors (no flash of the default theme).
@@ -67,6 +111,25 @@ function extensionPath(): string {
   return app.isPackaged ? path.join(process.resourcesPath, "extension") : path.join(app.getAppPath(), "extension");
 }
 
+// Single source of truth for maintainer-specific info (see maintainer.config.json at the repo root).
+// Read live, not cached, so editing the file takes effect on the next click without a rebuild.
+function getSupportUrl(): string {
+  const configPath = app.isPackaged
+    ? path.join(process.resourcesPath, "maintainer.config.json")
+    : path.join(app.getAppPath(), "maintainer.config.json");
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as { githubUsername?: string };
+    if (config.githubUsername) return `https://github.com/sponsors/${config.githubUsername}`;
+  } catch {
+    // Fall through to the generic page below — still a working link, just not pre-filled to a profile.
+  }
+  return "https://github.com/sponsors";
+}
+
+// Tracked separately from the rest of AppState so autoUpdater events (which fire outside of any
+// IPC handler) can update it and broadcast without rebuilding everything else unnecessarily.
+let updateState: UpdateState | null = null;
+
 function currentState(): AppState {
   return {
     settings: settingsStore.get(),
@@ -75,7 +138,72 @@ function currentState(): AppState {
     extensionPath: extensionPath(),
     dataPath: app.getPath("userData"),
     version: app.getVersion(),
+    launchAtLogin: app.getLoginItemSettings().openAtLogin,
+    update: updateState,
   };
+}
+
+function setUpdateState(s: UpdateState): void {
+  updateState = s;
+  broadcastState();
+}
+
+// The update feed URL is built from the GitHub Releases API convention that electron-builder targets
+// when you set publish.provider = "github". Each release's update metadata file (latest-mac.yml) is
+// at: https://github.com/{owner}/{repo}/releases/latest/download/latest-mac.yml
+// The owner/repo is read from maintainer.config.json at runtime so you only have to edit one place.
+// Feed URL format: https://update.electronjs.org/{owner}/{repo}/{platform}/{version}
+// (This is the public Electron update service — no server to run, reads directly from GitHub Releases.)
+function setupUpdater(): void {
+  if (!app.isPackaged) {
+    log("updater: skipping (not a packaged build)");
+    return;
+  }
+
+  const configPath = path.join(app.getAppPath(), "maintainer.config.json");
+  let repoOwner = "";
+  let repoName = "cascade";
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as { githubUsername?: string; repoName?: string };
+    repoOwner = (config.githubUsername ?? "").trim();
+    if (config.repoName) repoName = config.repoName.trim();
+  } catch {
+    log("updater: could not read maintainer.config.json — skipping update check");
+    return;
+  }
+  if (!repoOwner) {
+    log("updater: githubUsername not set in maintainer.config.json — skipping update check");
+    return;
+  }
+
+  const feedUrl = `https://update.electronjs.org/${repoOwner}/${repoName}/${process.platform}-${process.arch}/${app.getVersion()}`;
+  log(`updater: feed URL ${feedUrl}`);
+
+  try {
+    autoUpdater.setFeedURL({ url: feedUrl });
+  } catch (err) {
+    log(`updater: could not set feed URL — ${(err as Error).message}`);
+    return;
+  }
+
+  autoUpdater.on("checking-for-update", () => { log("updater: checking"); setUpdateState({ phase: "checking" }); });
+  autoUpdater.on("update-not-available", () => { log("updater: current"); setUpdateState({ phase: "current" }); });
+  autoUpdater.on("update-available", () => { log("updater: update available — downloading"); setUpdateState({ phase: "available", version: "" }); });
+  autoUpdater.on("update-downloaded", (_e, _notes, releaseName) => {
+    log(`updater: ready to install ${releaseName}`);
+    setUpdateState({ phase: "ready", version: releaseName ?? "" });
+  });
+  autoUpdater.on("error", (err) => {
+    log(`updater: error — ${err.message}`);
+    // Don't surface a permanent error state for transient things (offline, rate limit). The
+    // next scheduled check will clear it.
+    setUpdateState({ phase: "error", message: err.message });
+  });
+
+  // Check on launch (delayed so the main window is visible before anything else happens), then
+  // once every 4 hours for a long-running session.
+  setTimeout(() => { try { autoUpdater.checkForUpdates(); } catch { /* already logged above */ } }, 10_000);
+  setInterval(() => { try { autoUpdater.checkForUpdates(); } catch { /* already logged above */ } }, 4 * 60 * 60 * 1000);
 }
 
 function broadcastState(): void {
@@ -148,12 +276,36 @@ function registerIpc(): void {
   ipcMain.handle("downloads:pause", (_e, id: string) => manager.pause(id));
   ipcMain.handle("downloads:resume", (_e, id: string) => manager.resume(id));
   ipcMain.handle("downloads:remove", (_e, id: string) => manager.remove(id));
+  ipcMain.handle("downloads:dismiss", (_e, id: string) => manager.dismiss(id));
+  ipcMain.handle("downloads:erase", (_e, id: string) => manager.erase(id));
   ipcMain.handle("downloads:pauseAll", () => manager.pauseAll());
   ipcMain.handle("downloads:resumeAll", () => manager.resumeAll());
 
   ipcMain.handle("downloads:revealInFinder", (_e, id: string) => {
     const task = manager.get(id);
-    if (task) shell.showItemInFolder(task.destinationPath);
+    if (!task) return;
+    // destinationPath only exists on disk once the download has actually completed — before that,
+    // the real file sitting there is partPath (the .part file). Pointing showItemInFolder at a path
+    // that doesn't exist yet is why this silently did nothing for anything still in progress or paused.
+    shell.showItemInFolder(task.getStatus() === "completed" ? task.destinationPath : task.partPath);
+  });
+
+  // A thumbnail of the actual downloaded image, used as that row's icon instead of the generic
+  // file-type glyph. Only for completed, recognizably-image files — nativeImage decodes locally
+  // (no network, no extra dependency) and resize() keeps what crosses into the renderer small.
+  const THUMBNAIL_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp", "ico"]);
+  ipcMain.handle("downloads:getThumbnail", (_e, id: string): string | null => {
+    const task = manager.get(id);
+    if (!task || task.getStatus() !== "completed") return null;
+    const ext = path.extname(task.destinationPath).slice(1).toLowerCase();
+    if (!THUMBNAIL_EXTENSIONS.has(ext)) return null;
+    try {
+      const image = nativeImage.createFromPath(task.destinationPath);
+      if (image.isEmpty()) return null;
+      return image.resize({ width: 64, height: 64, quality: "good" }).toDataURL();
+    } catch {
+      return null; // unreadable, corrupt, or a format nativeImage can't decode — fall back to the glyph
+    }
   });
 
   ipcMain.handle("downloads:chooseDestinationDir", async (): Promise<string | null> => {
@@ -165,6 +317,24 @@ function registerIpc(): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  // Free space on the volume a destination folder lives on, for the Add Download dialog. Walks up
+  // to an existing ancestor first since the chosen folder may not exist yet (createDirectory lets
+  // you pick a not-yet-created one) and statfs needs a real path.
+  ipcMain.handle("downloads:getFreeSpace", async (_e, dir: string): Promise<number | null> => {
+    let target = dir;
+    while (!fs.existsSync(target)) {
+      const parent = path.dirname(target);
+      if (parent === target) return null; // reached the root without finding anything that exists
+      target = parent;
+    }
+    try {
+      const stats = await fs.promises.statfs(target);
+      return stats.bavail * stats.bsize;
+    } catch {
+      return null; // not all filesystems report this (e.g. some network mounts) — hide the label rather than guess
+    }
+  });
+
   ipcMain.handle("state:get", (): AppState => currentState());
   ipcMain.handle("state:update", (_e, patch: Partial<Settings>) => updateSettings(patch ?? {}));
   ipcMain.handle("state:regenerateToken", (): AppState => {
@@ -172,8 +342,21 @@ function registerIpc(): void {
     broadcastState();
     return currentState();
   });
+  ipcMain.handle("app:setLaunchAtLogin", (_e, enabled: boolean): AppState => {
+    app.setLoginItemSettings({ openAtLogin: Boolean(enabled) });
+    return currentState();
+  });
   ipcMain.handle("clipboard:write", (_e, text: string) => clipboard.writeText(String(text)));
   ipcMain.handle("app:revealData", () => shell.openPath(app.getPath("userData")));
+  // The destination always comes from maintainer.config.json on disk, never from the renderer —
+  // nothing here for a compromised page to redirect elsewhere.
+  ipcMain.handle("app:openSupportLink", () => shell.openExternal(getSupportUrl()));
+  ipcMain.handle("app:installUpdate", () => {
+    // Only callable from the renderer; actually installs and restarts the app. The renderer shows
+    // the prompt — we never restart without the user explicitly clicking the button.
+    log("updater: user requested restart to install update");
+    autoUpdater.quitAndInstall();
+  });
   ipcMain.handle("extension:reveal", () => {
     shell.showItemInFolder(path.join(extensionPath(), "manifest.json"));
   });
@@ -235,6 +418,8 @@ if (!app.requestSingleInstanceLock()) {
     });
     process.on("SIGTERM", () => app.quit());
     process.on("SIGINT", () => app.quit());
+    buildMenu();
+    setupUpdater();
     createWindow();
 
     app.on("activate", () => {

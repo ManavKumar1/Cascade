@@ -99,9 +99,42 @@ extension/     Chrome extension (Manifest V3); core.js holds the logic and is un
 tests/         Engine, settings, bridge-security and extension-flow tests against local servers
 ```
 
-## Not done yet / caveats
+## Support Cascade
 
-- Not verified on an actual Mac (built and tested on Linux, including real-process kill/restart tests).
-- Unsigned builds trigger a Gatekeeper warning; signing/notarization needs an Apple Developer ID.
-- Downloads don't get the macOS quarantine flag yet, so Gatekeeper won't check downloaded apps like it does for browser downloads.
-- No app icon for the desktop app yet (the extension has one).
+Made with ❤️ in India. If Cascade's useful to you, voluntary support is welcome but never required — it's free either way.
+
+All the values below (GitHub username, UPI ID) live in one place: [`maintainer.config.json`](maintainer.config.json). This README and `.github/FUNDING.yml` are both static text GitHub renders directly — nothing on GitHub's end can read the config live the way the in-app Support button does — so a GitHub Action picks up any change to that file on push and commits the synced result here automatically; nothing further to do after pushing the config change itself. To preview the result locally first, run `npm run sync:maintainer`.
+
+- **From anywhere**: <!-- MAINTAINER:SPONSORS_LINK_START -->
+[GitHub Sponsors](https://github.com/sponsors/Syncxy)
+<!-- MAINTAINER:SPONSORS_LINK_END --> — pick $1, $5, $10, or a custom amount, one-time or recurring. GitHub pays out straight to an individual's own bank account; no company needed on either end, and GitHub takes no cut on personal sponsorships (payment-processor fees may still apply).
+
+  The "Sponsor" button doesn't appear on its own — two things both have to be true first: `.github/FUNDING.yml` has your *real* GitHub username in it, **and** that account has a live GitHub Sponsors profile. The file alone does nothing until the profile behind it exists. To set one up: go to [github.com/sponsors](https://github.com/sponsors), start a sponsored developer profile, and complete the bank details and agreement — GitHub reviews it before it goes live, which can take a few days.
+
+- **From India**: UPI, directly to the maintainer's own bank account. Zero fees, settles instantly, no intermediary.
+
+<!-- MAINTAINER:UPI_START -->
+  Not set up yet. `upiId` is empty in `maintainer.config.json` — add it there and re-run `npm run sync:maintainer` to show a real UPI ID and QR here instead of this line.
+<!-- MAINTAINER:UPI_END -->
+
+  Worth knowing if a UPI ID feels too exposing to put in a public README: it doesn't have to be your phone number. Most bank apps let you set a custom UPI ID (like `yourname@oksbi`) that's unrelated to your number, under the app's "manage UPI ID" or "add new UPI ID" screen — worth checking before ruling UPI out.
+
+A couple of things worth knowing, honestly:
+- These links are plain, static URLs/files in this repo — the same as any other file. Nothing stops someone who forks the project from pointing their own copy's links at their own accounts; that's true of every open-source donate button, not specific to this setup. The only real protection is the normal one: review PRs before merging, and keep the canonical links here, in this README and in `.github/FUNDING.yml`, as the one place people should trust.
+- Receiving money, including gifts/donations, can carry tax and reporting obligations in India (and wherever a supporter sends from). This isn't tax or legal advice — if it starts adding up to real money, it's worth a quick conversation with a chartered accountant.
+
+## Contributing
+
+Bug reports, feature requests and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) to get set up. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before participating. Found a security issue? See [SECURITY.md](SECURITY.md) rather than opening a public issue. Released changes are tracked in [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+Cascade is licensed under the **PolyForm Noncommercial License 1.0.0**.
+
+You are welcome to use, study, modify, share, and contribute to Cascade for noncommercial purposes.
+
+Commercial use, including selling Cascade or modified versions, requires separate permission from the copyright holder.
+
+See the [LICENSE](LICENSE) file for the complete terms.
+
+Copyright © 2026 Cascade contributors. All rights reserved except as expressly licensed.

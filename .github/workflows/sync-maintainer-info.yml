@@ -1,0 +1,45 @@
+# Runs scripts/sync-maintainer-info.js automatically whenever maintainer.config.json changes, and
+# commits the result. This exists because FUNDING.yml and README.md are both static files GitHub
+# renders directly — there's no templating step on GitHub's end, so nothing can make them "read from"
+# maintainer.config.json at view-time the way the in-app Support button does. This workflow is what
+# actually closes that gap: edit the config, push, and the sync step + commit happen for you instead
+# of relying on remembering to run `npm run sync:maintainer` locally before every push.
+name: Sync maintainer info
+
+on:
+  push:
+    paths:
+      - maintainer.config.json
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Only dependency the sync script actually needs (for regenerating the UPI QR); installed
+      # directly rather than a full `npm ci` of electron/electron-builder/vitest, which this doesn't
+      # touch and would only slow the job down.
+      - run: npm install qrcode --no-save
+
+      - run: node scripts/sync-maintainer-info.js
+
+      - name: Commit the synced files, if anything changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Nothing to sync — README.md and FUNDING.yml already match the config."
+          else
+            git add .github/FUNDING.yml README.md assets/upi-qr.png 2>/dev/null || git add .github/FUNDING.yml README.md
+            git commit -m "chore: sync maintainer info from maintainer.config.json [skip ci]"
+            git push
+          fi

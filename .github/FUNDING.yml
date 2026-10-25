@@ -1,0 +1,4 @@
+# This file powers the "Sponsor" button GitHub shows at the top of the repo.
+# No deployment needed — GitHub reads this file directly from the repo.
+# Fill in your own GitHub username below (the one you'll set up GitHub Sponsors on).
+github: [Syncxy]
